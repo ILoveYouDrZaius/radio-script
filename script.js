@@ -3,7 +3,7 @@ var http = require('http');
 var options = {
   host: 'localhost',
   port: 3500,
-  path: '/emision',
+  path: '/songtoplay',
   method: 'GET'
 };
 
