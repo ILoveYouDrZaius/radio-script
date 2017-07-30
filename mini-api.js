@@ -15,8 +15,7 @@ var db = firebase.database();
 
 function song_to_play(){
   return new Promise((resolve, reject)=>{
-    var query = db.ref('database/active-emission').orderByChild('nominated').equalTo(true).once('value', snaps => {
-    }).then((data) => {
+    var query = db.ref('database/active-emission').orderByChild('nominated').equalTo(true).once('value').then((data) => {
       numSongsNominated = data.numChildren();
       if(numSongsNominated == 3){
         let winnerSong = '';
@@ -37,12 +36,11 @@ function song_to_play(){
         });
         if(winnerSong === ''){
           winnerSong = winnerSongAux;
-          console.log('GANADOR NUEVO: '+winnerSong);
         }
         db.ref('database/active-emission/'+winnerSong).update({
           'playing': true
         });
-        
+
         resolve(data.child(winnerSong));
       }else{
         reject('No hay 3 canciones nominadas');
@@ -67,12 +65,12 @@ function nominate_songs(){
       numSongsReadyForNom = songsReadyForNominate.length;
       var randomSongsIndex = [];
       while(randomSongsIndex.length < 3){
-          var randomnumber = Math.ceil(Math.random()*numSongsReadyForNom);
+          var randomnumber = Math.ceil(Math.random()*(numSongsReadyForNom-1));
           if(randomSongsIndex.indexOf(randomnumber) > -1) continue;
           randomSongsIndex[randomSongsIndex.length] = randomnumber;
       }
       console.log(randomSongsIndex);
-      nominatedSongs = []; 
+      nominatedSongs = [];
       for(var i=0;i<3;i++){
         nominatedSongs.push(songsReadyForNominate[randomSongsIndex[i]]);
       }
@@ -112,26 +110,111 @@ function set_playing_false(){
   });
 }
 
+function is_first_emission(){
+  return new Promise((resolve, reject)=>{
+    var query = db.ref('database/active-emission').orderByChild('playing').equalTo(true).once('value').then((dataPlaying) => {
+      if(dataPlaying.numChildren() > 0){
+        resolve(false);
+      }else{
+        var query = db.ref('database/active-emission').orderByChild('nominated').equalTo(true).once('value').then((dataNominated) => {
+          if(dataNominated.numChildren() > 0){
+            resolve(false);
+          }else{
+            resolve(true);
+          }
+        });
+      }
+    }).catch((error)=>{
+      reject(error);
+    });
+  });
+}
+
+function first_emission(){
+  return new Promise((resolve, reject)=>{
+    var query = db.ref('database/active-emission').orderByChild('playing').equalTo(false).once('value').then((data) => {
+      numSongs = data.numChildren();
+      songsReadyForNominate = [];
+      data.forEach((child) => {
+        if (data.child(child.key).val().nominated === false){
+          songsReadyForNominate.push(child.key);
+        }
+        songsReadyForNominate.push(child.key);
+      });
+      songsReadyForPlaying = songsReadyForNominate;
+      numSongsReadyForNom = songsReadyForNominate.length;
+      var randomSongsIndex = [];
+      while(randomSongsIndex.length < 3){
+          var randomnumber = Math.ceil(Math.random()*(numSongsReadyForNom-1));
+          if(randomSongsIndex.indexOf(randomnumber) > -1) continue;
+          randomSongsIndex[randomSongsIndex.length] = randomnumber;
+      }
+      console.log(randomSongsIndex);
+      nominatedSongs = [];
+
+      for(var i=0;i<3;i++){
+        nominatedSongs.push(songsReadyForNominate[randomSongsIndex[i]]);
+        songsReadyForPlaying.splice(randomSongsIndex[i],1);
+      }
+      console.log('Tamanyo nominadas: '+nominatedSongs.length)
+      console.log('NOMINATEDSONGS');
+      console.log(nominatedSongs)
+      nominatedSongs.forEach((songKey)=>{
+        db.ref('database/active-emission/'+songKey).update({
+            'nominated': true
+          });
+      });
+      numSongsReadyForPlaying = songsReadyForPlaying.length;
+      var songForPlaying = [];
+      var randomSongsIndex = [];
+      var randomnumber = Math.ceil(Math.random()*(numSongsReadyForPlaying-1));
+
+      songForPlaying.push(songsReadyForPlaying[randomnumber]);
+      songForPlaying.forEach((songKey)=>{
+        db.ref('database/active-emission/'+songKey).update({
+            'playing': true
+          });
+      });
+
+      resolve(songForPlaying);
+    }).catch((error)=>{
+      reject(error);
+    });
+  });
+}
+
+
+
 app.get('/songtoplay', function (req, res) {
-  set_playing_false().then((setPlayingFalse)=>{
-    song_to_play().then((winnerSong)=>{
-      nominate_songs().then((nominatedSongs)=>{
-        console.log('nominated songs:');
-        console.log(nominatedSongs);
-        res.send(winnerSong.val());
-      }).catch((error)=>{
-        console.log('ERROR EN nominate_songs');
+  is_first_emission().then((first_emission_result)=>{
+    if(first_emission_result){
+      first_emission().then((path)=>{
+
+        res.send('FIRST EMISSION');
+      });
+    }else{
+      set_playing_false().then((setPlayingFalse)=>{
+        song_to_play().then((winnerSong)=>{
+          nominate_songs().then((nominatedSongs)=>{
+            console.log('nominated songs:');
+            console.log(nominatedSongs);
+            res.send(winnerSong.val().path);
+          }).catch((error)=>{
+            console.log('ERROR EN nominate_songs');
+            console.error(error);
+            res.send(error);
+          });
+        }).catch((error) => {
+          console.error(error);
+          res.send(error);
+        });
+      }).catch((error) => {
         console.error(error);
         res.send(error);
       });
-    }).catch((error) => {
-      console.error(error);
-      res.send(error);
-    });
-  }).catch((error) => {
-      console.error(error);
-      res.send(error);
+    }
   });
+
 });
 
 app.listen(3500, function () {
