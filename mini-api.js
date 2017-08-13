@@ -18,9 +18,9 @@ function song_to_play(){
     var query = db.ref('database/active-emission').orderByChild('nominated').equalTo(true).once('value').then((data) => {
       numSongsNominated = data.numChildren();
       if(numSongsNominated == 3){
-        let winnerSong = '';
-        let winnerSongAux = '';
-        let maxVotes = 0;
+        var winnerSong = '';
+        var winnerSongAux = '';
+        var maxVotes = 0;
         // Las 3 canciones
         data.forEach( child => {
           winnerSongAux = child.key;
@@ -40,8 +40,10 @@ function song_to_play(){
         db.ref('database/active-emission/'+winnerSong).update({
           'playing': true
         });
-
-        resolve(data.child(winnerSong));
+        console.log('KeyGanadora: ', winnerSong);
+        db.ref('database/songs/'+winnerSong).once('value').then((song) => {
+          resolve(song.val().path);
+        })
       }else{
         reject('No hay 3 canciones nominadas');
       }
@@ -96,8 +98,6 @@ function set_playing_false(){
         reject ('Error. Hay mas de una cancion con playing true');
       }else{
         data.forEach(child => {
-          console.log('CHILDKEY');
-          console.log(child.key);
           db.ref('database/active-emission/'+child.key).update({
             'playing': false
           });
@@ -168,15 +168,17 @@ function first_emission(){
       var songForPlaying = [];
       var randomSongsIndex = [];
       var randomnumber = Math.ceil(Math.random()*(numSongsReadyForPlaying-1));
-
+      var keyWinnerSong = '';
       songForPlaying.push(songsReadyForPlaying[randomnumber]);
       songForPlaying.forEach((songKey)=>{
         db.ref('database/active-emission/'+songKey).update({
             'playing': true
-          });
+        });
+        keyWinnerSong = songKey;
       });
-
-      resolve(songForPlaying);
+      db.ref('database/songs/'+keyWinnerSong).once('value').then((song) => {
+        resolve(song.val().path);
+      })
     }).catch((error)=>{
       reject(error);
     });
@@ -189,16 +191,14 @@ app.get('/songtoplay', function (req, res) {
   is_first_emission().then((first_emission_result)=>{
     if(first_emission_result){
       first_emission().then((path)=>{
-
-        res.send('FIRST EMISSION');
+        res.send(path);
       });
     }else{
       set_playing_false().then((setPlayingFalse)=>{
-        song_to_play().then((winnerSong)=>{
+        song_to_play().then((winnerSongPath)=>{
           nominate_songs().then((nominatedSongs)=>{
-            console.log('nominated songs:');
-            console.log(nominatedSongs);
-            res.send(winnerSong.val().path);
+            console.log('PATH GANADOR', winnerSongPath);
+            res.send(winnerSongPath);
           }).catch((error)=>{
             console.log('ERROR EN nominate_songs');
             console.error(error);
